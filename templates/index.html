@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Multi-Agent LLM System</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0a1428;
+    --card:     #111f38;
+    --card2:    #0d1a30;
+    --border:   #1e3555;
+    --cyan:     #00c8ff;
+    --gold:     #f5c518;
+    --purple:   #8b5cf6;
+    --green:    #22d36e;
+    --red:      #f87171;
+    --white:    #ffffff;
+    --gray:     #b0c4de;
+    --dgray:    #1e3555;
+  }
+  html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--white); }
+
+  /* ── Layout ───────────────────────────────────────────────────── */
+  .app { display: grid; grid-template-rows: 64px 1fr; height: 100vh; }
+
+  /* ── Header ───────────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px;
+    background: var(--card);
+    border-bottom: 2px solid var(--cyan);
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { font-size: 22px; }
+  .logo-title { font-size: 17px; font-weight: 700; color: var(--white); letter-spacing: .5px; }
+  .logo-sub   { font-size: 11px; color: var(--gray); margin-top: 2px; }
+  .header-badges { display: flex; gap: 8px; }
+  .badge {
+    padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    border: 1px solid;
+  }
+  .badge-cyan   { color: var(--cyan);   border-color: var(--cyan);   background: rgba(0,200,255,.08); }
+  .badge-gold   { color: var(--gold);   border-color: var(--gold);   background: rgba(245,197,24,.08); }
+  .badge-purple { color: var(--purple); border-color: var(--purple); background: rgba(139,92,246,.08); }
+
+  /* ── Main ─────────────────────────────────────────────────────── */
+  main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+
+  /* ── Sidebar ──────────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--card2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto; padding: 20px;
+    gap: 18px;
+  }
+  .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--gray); text-transform: uppercase; margin-bottom: 6px;
+  }
+  textarea {
+    width: 100%; min-height: 90px; resize: vertical;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--white); border-radius: 6px; padding: 10px 12px;
+    font-size: 13px; font-family: inherit; outline: none;
+    transition: border-color .2s;
+  }
+  textarea:focus { border-color: var(--cyan); }
+  .task-preset {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; cursor: pointer;
+    font-size: 12px; color: var(--gray); transition: all .2s;
+    text-align: left; width: 100%;
+  }
+  .task-preset:hover { border-color: var(--cyan); color: var(--white); }
+
+  .mode-btns { display: flex; gap: 8px; }
+  .mode-btn {
+    flex: 1; padding: 8px 4px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--card); color: var(--gray); font-size: 12px;
+    cursor: pointer; transition: all .2s; font-weight: 600;
+  }
+  .mode-btn.active-c  { border-color: var(--gold);   color: var(--gold);   background: rgba(245,197,24,.08); }
+  .mode-btn.active-d  { border-color: var(--purple);  color: var(--purple);  background: rgba(139,92,246,.08); }
+  .mode-btn.active-b  { border-color: var(--cyan);   color: var(--cyan);   background: rgba(0,200,255,.08); }
+
+  .run-btn {
+    width: 100%; padding: 12px; border-radius: 8px;
+    border: none; background: var(--cyan); color: #001e2b;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .run-btn:hover   { opacity: .88; }
+  .run-btn:active  { transform: scale(.98); }
+  .run-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .eval-btn {
+    width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--purple); background: transparent;
+    color: var(--purple); font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .2s;
+  }
+  .eval-btn:hover { background: rgba(139,92,246,.12); }
+
+  /* ── Output area ──────────────────────────────────────────────── */
+  .output-area {
+    overflow-y: auto;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  /* ── Welcome ─────────────────────────────────────────────────── */
+  .welcome {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center;
+    height: 100%; gap: 16px; color: var(--gray);
+  }
+  .welcome-icon { font-size: 52px; }
+  .welcome h2   { font-size: 22px; color: var(--white); }
+  .welcome p    { font-size: 14px; max-width: 380px; line-height: 1.6; }
+
+  /* ── Result cards ─────────────────────────────────────────────── */
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .result-grid.single { grid-template-columns: 1fr; }
+
+  .result-card {
+    background: var(--card); border-radius: 10px;
+    border: 1px solid var(--border); overflow: hidden;
+  }
+  .result-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .result-title { font-size: 15px; font-weight: 700; }
+  .result-time  { font-size: 11px; color: var(--gray); }
+
+  .result-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Steps / pipeline ─────────────────────────────────────────── */
+  .steps-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; color: var(--gray); text-transform: uppercase; }
+  .pipeline { display: flex; flex-direction: column; gap: 8px; }
+  .step {
+    background: var(--card2); border-radius: 6px; padding: 10px 12px;
+    border-left: 3px solid; font-size: 12px;
+    animation: fadeIn .4s ease both;
+  }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: none; } }
+  .step-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .step-from { font-weight: 700; font-size: 11px; }
+  .step-arrow { color: var(--gray); }
+  .step-to   { font-weight: 700; font-size: 11px; }
+  .step-msg  { color: var(--gray); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+  .step-result { color: var(--white); font-size: 12px; margin-top: 4px; line-height: 1.5; }
+
+  /* ── Final output ─────────────────────────────────────────────── */
+  .final-box {
+    background: var(--card2); border-radius: 8px;
+    border-top: 2px solid; padding: 14px 16px;
+  }
+  .final-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 6px; }
+  .final-text  { font-size: 14px; line-height: 1.7; color: var(--white); }
+
+  /* ── Eval results ─────────────────────────────────────────────── */
+  .eval-section { display: flex; flex-direction: column; gap: 16px; }
+  .eval-title   { font-size: 18px; font-weight: 700; color: var(--white); }
+  .eval-subtitle { font-size: 13px; color: var(--gray); }
+
+  .eval-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .eval-stat {
+    background: var(--card); border-radius: 8px; padding: 14px;
+    border-top: 2px solid; text-align: center;
+  }
+  .eval-stat-val   { font-size: 28px; font-weight: 700; }
+  .eval-stat-label { font-size: 11px; color: var(--gray); margin-top: 4px; }
+
+  .eval-table-wrap { overflow-x: auto; }
+  .eval-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  .eval-table th {
+    padding: 10px 14px; text-align: left; font-size: 11px;
+    font-weight: 700; letter-spacing: 1px; color: var(--gray);
+    border-bottom: 1px solid var(--border); text-transform: uppercase;
+  }
+  .eval-table td {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  .eval-table tr:last-child td { border-bottom: none; }
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; border: 1px solid;
+  }
+  .pill-green  { color: var(--green);  border-color: var(--green);  background: rgba(34,211,110,.1); }
+  .pill-red    { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,.1); }
+  .pill-cyan   { color: var(--cyan);   border-color: var(--cyan);   background: rgba(0,200,255,.1); }
+  .pill-gold   { color: var(--gold);   border-color: var(--gold);   background: rgba(245,197,24,.1); }
+
+  /* ── Loader ───────────────────────────────────────────────────── */
+  .loader { display: flex; align-items: center; gap: 10px; color: var(--gray); font-size: 14px; padding: 20px; }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--cyan); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Agent colours */
+  .agent-controller { color: var(--gold); }
+  .agent-planner    { color: var(--cyan); }
+  .agent-executor   { color: var(--purple); }
+  .agent-reviewer   { color: var(--green); }
+  .agent-bus        { color: var(--gray); }
+  .agent-output     { color: var(--white); }
+
+  .border-c  { border-color: var(--gold); }
+  .border-d  { border-color: var(--purple); }
+  .text-c    { color: var(--gold); }
+  .text-d    { color: var(--purple); }
+
+  /* scroll */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">🤖</span>
+      <div>
+        <div class="logo-title">Multi-Agent LLM System</div>
+        <div class="logo-sub">Centralized vs Decentralized — Final Project</div>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-gold">Centralized</span>
+      <span class="badge badge-purple">Decentralized</span>
+      <span class="badge badge-cyan">Jayasairohith Valasapalli</span>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <div>
+        <div class="section-label">Task</div>
+        <textarea id="taskInput" placeholder="Enter a task for the agents...">Design a study plan for learning machine learning in 30 days.</textarea>
+      </div>
+
+      <div>
+        <div class="section-label">Preset Tasks</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          {% for task in default_tasks %}
+          <button class="task-preset" onclick="setTask(this.textContent)">{{ task }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Mode</div>
+        <div class="mode-btns">
+          <button class="mode-btn" id="m-c" onclick="setMode('centralized')">⬛ Central</button>
+          <button class="mode-btn" id="m-d" onclick="setMode('decentralized')">⬟ Decent.</button>
+          <button class="mode-btn active-b" id="m-b" onclick="setMode('both')">⟷ Both</button>
+        </div>
+      </div>
+
+      <button class="run-btn" id="runBtn" onclick="runSystem()">▶ Run Agents</button>
+      <button class="eval-btn" onclick="runEvaluation()">📊 Run Full Evaluation (3 Tasks)</button>
+
+      <!-- Mini architecture legend -->
+      <div style="background:var(--card);border-radius:8px;padding:14px;font-size:11px;color:var(--gray);line-height:1.8;">
+        <div style="font-weight:700;color:var(--white);margin-bottom:8px;font-size:12px;">Architecture</div>
+        <div><span class="agent-controller">■</span> Controller — routes all tasks</div>
+        <div><span class="agent-planner">■</span> Planner — breaks task into steps</div>
+        <div><span class="agent-executor">■</span> Executor — carries out plan</div>
+        <div><span class="agent-reviewer">■</span> Reviewer — checks output</div>
+        <div style="margin-top:8px;"><span class="agent-bus">■</span> MessageBus — P2P channel (decent. only)</div>
+      </div>
+
+    </aside>
+
+    <!-- OUTPUT -->
+    <div class="output-area" id="outputArea">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">🧠</div>
+        <h2>Multi-Agent LLM Interface</h2>
+        <p>Enter a task on the left and click <strong>Run Agents</strong> to see how Centralized and Decentralized architectures handle it — step by step.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+let currentMode = 'both';
+
+function setMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.className = 'mode-btn');
+  const map = { centralized: ['m-c','active-c'], decentralized: ['m-d','active-d'], both: ['m-b','active-b'] };
+  const [id, cls] = map[m];
+  document.getElementById(id).classList.add(cls);
+}
+
+function setTask(text) {
+  document.getElementById('taskInput').value = text.trim();
+}
+
+function agentClass(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('controller')) return 'agent-controller';
+  if (n.includes('planner'))    return 'agent-planner';
+  if (n.includes('executor'))   return 'agent-executor';
+  if (n.includes('reviewer'))   return 'agent-reviewer';
+  if (n.includes('bus'))        return 'agent-bus';
+  return 'agent-output';
+}
+
+function stepBorderColor(step, system) {
+  const to = (step.to || step.recipient || '').toLowerCase();
+  if (to.includes('planner'))    return '#00c8ff';
+  if (to.includes('executor'))   return '#8b5cf6';
+  if (to.includes('reviewer'))   return '#22d36e';
+  if (to.includes('controller')) return '#f5c518';
+  return '#1e3555';
+}
+
+function renderSteps(steps, system) {
+  if (!steps || !steps.length) return '<div style="color:var(--gray);font-size:12px;">No steps recorded.</div>';
+  return steps.map((step, i) => {
+    const fromName = step.from || 'System';
+    const toName   = step.to   || step.recipient || '?';
+    const msg      = step.message || step.content || '';
+    const res      = step.result  || '';
+    const borderC  = stepBorderColor(step, system);
+    const delay    = i * 0.08;
+    return `
+      <div class="step" style="border-color:${borderC};animation-delay:${delay}s">
+        <div class="step-row">
+          <span class="${agentClass(fromName)} step-from">${fromName}</span>
+          <span class="step-arrow">→</span>
+          <span class="${agentClass(toName)} step-to">${toName}</span>
+        </div>
+        ${msg ? `<div class="step-msg">${escHtml(msg)}</div>` : ''}
+        ${res ? `<div class="step-result">${escHtml(res)}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function renderResult(data, system) {
+  const col     = system === 'Centralized' ? 'c' : 'd';
+  const icon    = system === 'Centralized' ? '⬛' : '⬟';
+  const label   = system === 'Centralized' ? 'Controller Pipeline' : 'Peer-to-Peer Bus';
+  const stepsHtml = renderSteps(data.steps, system);
+
+  return `
+    <div class="result-card">
+      <div class="result-header">
+        <div class="result-title text-${col}">${icon} ${system} <span style="font-size:12px;font-weight:400;color:var(--gray);">— ${label}</span></div>
+        <div class="result-time">⏱ ${data.time}s</div>
+      </div>
+      <div class="result-body">
+        <div>
+          <div class="steps-label">Pipeline Steps</div>
+          <div class="pipeline" style="margin-top:8px">${stepsHtml}</div>
+        </div>
+        <div class="final-box border-${col}">
+          <div class="final-label text-${col}">Final Output</div>
+          <div class="final-text">${escHtml(data.final)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function runSystem() {
+  const task = document.getElementById('taskInput').value.trim();
+  if (!task) { alert('Please enter a task first.'); return; }
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ Running...';
+
+  const area = document.getElementById('outputArea');
+  area.innerHTML = `<div class="loader"><div class="spinner"></div>Running agents on your task…</div>`;
+
+  try {
+    const res  = await fetch('/api/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ task, mode: currentMode })
+    });
+    const data = await res.json();
+
+    let html = `<div style="font-size:13px;color:var(--gray);margin-bottom:4px;">Task: <span style="color:var(--white)">${escHtml(task)}</span></div>`;
+    const hasBoth = data.centralized && data.decentralized;
+    html += `<div class="result-grid ${hasBoth ? '' : 'single'}">`;
+    if (data.centralized)   html += renderResult(data.centralized,   'Centralized');
+    if (data.decentralized) html += renderResult(data.decentralized, 'Decentralized');
+    html += '</div>';
+
+    area.innerHTML = html;
+  } catch(e) {
+    area.innerHTML = `<div style="color:var(--red);padding:20px;">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Run Agents';
+  }
+}
+
+async function runEvaluation() {
+  const area = document.getElementById('outputArea');
+  area.innerHTML = `<div class="loader"><div class="spinner"></div>Running full evaluation on all 3 tasks…</div>`;
+
+  try {
+    const res  = await fetch('/api/evaluate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    const s    = data.summary;
+
+    const metrics = [
+      { metric: 'Tasks Completed',       c: `${s.c_success}/${s.tasks_total}`,  d: `${s.d_success}/${s.tasks_total}`, cGood: true, dGood: true },
+      { metric: 'Avg Response Time',     c: `${s.c_avg_time}s`,                 d: `${s.d_avg_time}s`,                 cGood: s.c_avg_time <= s.d_avg_time, dGood: s.d_avg_time < s.c_avg_time },
+      { metric: 'Central Controller',    c: 'Yes',  d: 'No',   cGood: true,  dGood: false },
+      { metric: 'Peer-to-Peer Comms',    c: 'No',   d: 'Yes',  cGood: false, dGood: true  },
+      { metric: 'Single Point of Failure', c: 'Yes', d: 'No',  cGood: false, dGood: true  },
+      { metric: 'Scalability',           c: 'Limited', d: 'High', cGood: false, dGood: true },
+      { metric: 'Coordination',          c: 'Strong',  d: 'Challenging', cGood: true, dGood: false },
+      { metric: 'Consistency',           c: 'High',    d: 'Variable',    cGood: true, dGood: false },
+    ];
+
+    const tableRows = metrics.map(m => `
+      <tr>
+        <td style="color:var(--gray)">${m.metric}</td>
+        <td><span class="pill ${m.cGood ? 'pill-green' : 'pill-red'}">${m.c}</span></td>
+        <td><span class="pill ${m.dGood ? 'pill-green' : 'pill-red'}">${m.d}</span></td>
+      </tr>`).join('');
+
+    const taskRows = data.results.map((r, i) => `
+      <div style="background:var(--card2);border-radius:8px;padding:14px;border-left:3px solid var(--cyan)">
+        <div style="font-size:12px;font-weight:700;color:var(--cyan);margin-bottom:6px;">Task ${i+1}</div>
+        <div style="font-size:13px;color:var(--white);margin-bottom:10px">${escHtml(r.task)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:var(--card);border-radius:6px;padding:10px;border-top:2px solid var(--gold)">
+            <div style="font-size:10px;font-weight:700;color:var(--gold);margin-bottom:4px">CENTRALIZED</div>
+            <div style="font-size:12px;color:var(--gray)">${escHtml(r.centralized.final)}</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:4px">⏱ ${r.centralized.time}s</div>
+          </div>
+          <div style="background:var(--card);border-radius:6px;padding:10px;border-top:2px solid var(--purple)">
+            <div style="font-size:10px;font-weight:700;color:var(--purple);margin-bottom:4px">DECENTRALIZED</div>
+            <div style="font-size:12px;color:var(--gray)">${escHtml(r.decentralized.final)}</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:4px">⏱ ${r.decentralized.time}s</div>
+          </div>
+        </div>
+      </div>`).join('');
+
+    area.innerHTML = `
+      <div class="eval-section">
+        <div>
+          <div class="eval-title">📊 Full Evaluation Results</div>
+          <div class="eval-subtitle">Both systems run on all 3 tasks — direct comparison</div>
+        </div>
+
+        <div class="eval-stats">
+          <div class="eval-stat" style="border-color:var(--gold)">
+            <div class="eval-stat-val" style="color:var(--gold)">${s.c_avg_time}s</div>
+            <div class="eval-stat-label">Centralized Avg Time</div>
+          </div>
+          <div class="eval-stat" style="border-color:var(--purple)">
+            <div class="eval-stat-val" style="color:var(--purple)">${s.d_avg_time}s</div>
+            <div class="eval-stat-label">Decentralized Avg Time</div>
+          </div>
+          <div class="eval-stat" style="border-color:var(--green)">
+            <div class="eval-stat-val" style="color:var(--green)">${s.c_success}/${s.tasks_total}</div>
+            <div class="eval-stat-label">Centralized Success</div>
+          </div>
+          <div class="eval-stat" style="border-color:var(--green)">
+            <div class="eval-stat-val" style="color:var(--green)">${s.d_success}/${s.tasks_total}</div>
+            <div class="eval-stat-label">Decentralized Success</div>
+          </div>
+        </div>
+
+        <div class="eval-table-wrap">
+          <table class="eval-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th style="color:var(--gold)">⬛ Centralized</th>
+                <th style="color:var(--purple)">⬟ Decentralized</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+
+        <div style="font-size:13px;font-weight:700;color:var(--white)">Per-Task Results</div>
+        <div style="display:flex;flex-direction:column;gap:12px">${taskRows}</div>
+
+        <div style="background:var(--card);border-radius:8px;padding:16px;border-top:2px solid var(--cyan)">
+          <div style="font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Conclusion</div>
+          <div style="font-size:14px;color:var(--gray);line-height:1.7">
+            <strong style="color:var(--white)">Centralized</strong> → Better coordination, consistent output, easier to monitor.<br>
+            <strong style="color:var(--white)">Decentralized</strong> → More flexible, no single point of failure, harder to coordinate.<br>
+            <em>The right choice depends on your task's requirements for reliability vs. adaptability.</em>
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    area.innerHTML = `<div style="color:var(--red);padding:20px;">Error: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
